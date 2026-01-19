@@ -1,0 +1,62 @@
+# Chronicle Configuration
+# This file configures the changelog generator behavior.
+
+[repository]
+# Repository URL for generating links to commits and issues
+url = "https://github.com/user/chronicle"
+
+[filter]
+# Include/exclude commit types
+# By default, chore, test, ci, and build commits are excluded
+include_refactor = false
+include_docs = false
+include_chore = false
+include_test = false
+include_ci = false
+include_build = false
+include_merge_commits = false
+
+# Scopes to exclude from the changelog
+exclude_scopes = ["deps", "internal"]
+
+# Patterns to exclude (case-insensitive substring match)
+# Default patterns: wip, fixup, squash, typo, [skip changelog], [skip ci]
+exclude_patterns = []
+
+[format]
+# Show commit hashes in output
+show_hashes = true
+
+# Length of hash to display (e.g., 7 for short hash)
+hash_length = 7
+
+# Show author names in changelog
+show_authors = false
+
+# Show breaking change indicators
+show_breaking = true
+
+# Show scope in parentheses before description
+show_scope = true
+
+# Generate links to commits (requires repository.url)
+link_commits = true
+
+# Generate links to issues (requires repository.url)
+link_issues = true
+
+[sections]
+# Customize section names (default values shown)
+# feat = "Added"
+# fix = "Fixed"
+# perf = "Performance"
+# refactor = "Changed"
+# docs = "Documentation"
+# deprecate = "Deprecated"
+# remove = "Removed"
+# security = "Security"
+# chore = "Chore"
+# test = "Tests"
+# ci = "CI"
+# build = "Build"
+# other = "Other"

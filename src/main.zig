@@ -1,10 +1,11 @@
 const std = @import("std");
-const config = @import("config");
+const build_config = @import("config");
 
 const changelog = @import("changelog.zig");
 const git = @import("git.zig");
 const parser = @import("parser.zig");
 const filter = @import("filter.zig");
+const config = @import("config.zig");
 const markdown = @import("format/markdown.zig");
 const json = @import("format/json.zig");
 const github = @import("format/github.zig");
@@ -12,7 +13,7 @@ const github = @import("format/github.zig");
 const log = std.log.scoped(.chronicle);
 
 pub const std_options: std.Options = .{
-    .log_level = if (config.enable_logging) .debug else .info,
+    .log_level = if (build_config.enable_logging) .debug else .info,
 };
 
 const Command = enum {
@@ -30,6 +31,7 @@ const Args = struct {
     from_tag: ?[]const u8 = null,
     to_tag: ?[]const u8 = null,
     output_path: ?[]const u8 = null,
+    config_path: ?[]const u8 = null,
     format: Format = .markdown,
     dry_run: bool = false,
     quiet: bool = false,
@@ -94,6 +96,8 @@ fn parseArgs(allocator: std.mem.Allocator) !Args {
             args.to_tag = arg_iter.next();
         } else if (std.mem.eql(u8, arg, "--output") or std.mem.eql(u8, arg, "-o")) {
             args.output_path = arg_iter.next();
+        } else if (std.mem.eql(u8, arg, "--config") or std.mem.eql(u8, arg, "-c")) {
+            args.config_path = arg_iter.next();
         } else if (std.mem.eql(u8, arg, "--format") or std.mem.eql(u8, arg, "-f")) {
             if (arg_iter.next()) |format_str| {
                 if (std.mem.eql(u8, format_str, "json")) {
@@ -113,6 +117,22 @@ fn parseArgs(allocator: std.mem.Allocator) !Args {
 fn runGenerate(allocator: std.mem.Allocator, args: Args) !void {
     const stdout = std.fs.File.stdout();
     const stderr = std.fs.File.stderr();
+
+    // Load configuration
+    var cfg = blk: {
+        if (args.config_path) |path| {
+            if (try config.loadFromFile(allocator, path)) |c| {
+                break :blk c;
+            }
+            if (!args.quiet) {
+                var buf: [256]u8 = undefined;
+                const msg = std.fmt.bufPrint(&buf, "Warning: Config file not found: {s}\n", .{path}) catch "";
+                try stderr.writeAll(msg);
+            }
+        }
+        break :blk try config.loadDefault(allocator);
+    };
+    defer cfg.deinit();
 
     // Initialize git interface
     var git_repo = git.Git.init(allocator);
@@ -178,8 +198,9 @@ fn runGenerate(allocator: std.mem.Allocator, args: Args) !void {
         allocator.free(parsed_commits);
     }
 
-    // Filter commits
-    const commit_filter = filter.Filter.initDefault();
+    // Filter commits using configuration
+    const filter_config = cfg.toFilterConfig();
+    const commit_filter = filter.Filter.init(filter_config);
     var stats = filter.FilterStats{};
     defer stats.deinit(allocator);
 
@@ -213,12 +234,14 @@ fn runGenerate(allocator: std.mem.Allocator, args: Args) !void {
         try entry.addCommit(commit);
     }
 
-    // Format output
+    // Format output using configuration
+    const md_config = cfg.toMarkdownConfig();
     const output = switch (args.format) {
-        .markdown => try markdown.formatEntry(allocator, &entry),
+        .markdown => try markdown.formatEntryWithConfig(allocator, &entry, md_config),
         .json => try json.formatEntry(allocator, &entry),
         .github => try github.formatEntryWithConfig(allocator, &entry, .{
             .previous_version = from_ref,
+            .repo_url = cfg.repository.url,
         }),
     };
     defer allocator.free(output);
@@ -318,6 +341,7 @@ fn printHelp() void {
         \\    --from <TAG>         Start of commit range
         \\    --to <TAG>           End of commit range (default: HEAD)
         \\    -o, --output <PATH>  Output file (default: CHANGELOG.md)
+        \\    -c, --config <PATH>  Config file (default: chronicle.toml)
         \\    -f, --format <FMT>   Output format: markdown, json, github
         \\    --dry-run            Print to stdout instead of file
         \\    -q, --quiet          Suppress info messages

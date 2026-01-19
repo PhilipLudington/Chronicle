@@ -82,13 +82,13 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 
 ## Phase 10: Configuration System
 
-- [ ] Create config.zig module
-- [ ] Implement TOML parser (minimal, for chronicle.toml subset)
-- [ ] Load configuration from chronicle.toml if present
-- [ ] Support section name customization
-- [ ] Support filter configuration (include_refactor, include_docs, exclude_scopes, exclude_patterns)
-- [ ] Support format options (show_hashes, hash_length, show_authors, link_commits, link_issues)
-- [ ] Implement --config flag for custom config path
+- [x] Create config.zig module
+- [x] Implement TOML parser (minimal, for chronicle.toml subset)
+- [x] Load configuration from chronicle.toml if present
+- [x] Support section name customization
+- [x] Support filter configuration (include_refactor, include_docs, exclude_scopes, exclude_patterns)
+- [x] Support format options (show_hashes, hash_length, show_authors, link_commits, link_issues)
+- [x] Implement --config flag for custom config path
 
 ## Phase 11: Additional CLI Commands
 
