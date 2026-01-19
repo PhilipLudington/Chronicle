@@ -35,6 +35,7 @@ const Args = struct {
     format: Format = .markdown,
     dry_run: bool = false,
     quiet: bool = false,
+    full: bool = false,
 
     const Format = enum {
         markdown,
@@ -51,9 +52,19 @@ pub fn main() !void {
     const args = try parseArgs(allocator);
 
     switch (args.command) {
-        .generate => runGenerate(allocator, args) catch |err| {
-            if (err != error.NoVersion and err != error.NotImplemented) {
-                return err;
+        .generate => {
+            if (args.full) {
+                runFullGenerate(allocator, args) catch |err| {
+                    if (err != error.NoTagsFound) {
+                        return err;
+                    }
+                };
+            } else {
+                runGenerate(allocator, args) catch |err| {
+                    if (err != error.NoVersion and err != error.NotImplemented) {
+                        return err;
+                    }
+                };
             }
         },
         .init => try runInit(),
@@ -108,6 +119,8 @@ fn parseArgs(allocator: std.mem.Allocator) !Args {
                     args.format = .markdown;
                 }
             }
+        } else if (std.mem.eql(u8, arg, "--full")) {
+            args.full = true;
         }
     }
 
@@ -255,6 +268,164 @@ fn runGenerate(allocator: std.mem.Allocator, args: Args) !void {
         if (!args.quiet) {
             var buf: [256]u8 = undefined;
             const msg = std.fmt.bufPrint(&buf, "Wrote changelog to {s}\n", .{output_path}) catch "";
+            try stderr.writeAll(msg);
+        }
+    }
+}
+
+fn runFullGenerate(allocator: std.mem.Allocator, args: Args) !void {
+    const stdout = std.fs.File.stdout();
+    const stderr = std.fs.File.stderr();
+
+    // Load configuration
+    var cfg = blk: {
+        if (args.config_path) |path| {
+            if (try config.loadFromFile(allocator, path)) |c| {
+                break :blk c;
+            }
+            if (!args.quiet) {
+                var buf: [256]u8 = undefined;
+                const msg = std.fmt.bufPrint(&buf, "Warning: Config file not found: {s}\n", .{path}) catch "";
+                try stderr.writeAll(msg);
+            }
+        }
+        break :blk try config.loadDefault(allocator);
+    };
+    defer cfg.deinit();
+
+    // Initialize git interface
+    var git_repo = git.Git.init(allocator);
+    defer git_repo.deinit();
+
+    // Get all tags sorted by version (newest first)
+    const all_tags = try git_repo.getTags();
+    defer {
+        for (all_tags) |tag| {
+            allocator.free(tag);
+        }
+        allocator.free(all_tags);
+    }
+
+    if (all_tags.len == 0) {
+        if (!args.quiet) {
+            try stderr.writeAll("No tags found. Cannot generate full changelog.\n");
+        }
+        return error.NoTagsFound;
+    }
+
+    if (!args.quiet) {
+        var buf: [64]u8 = undefined;
+        const msg = std.fmt.bufPrint(&buf, "Generating full changelog from {d} tags\n", .{all_tags.len}) catch "";
+        try stderr.writeAll(msg);
+    }
+
+    // Build complete changelog content
+    var full_output = std.ArrayListUnmanaged(u8){};
+    defer full_output.deinit(allocator);
+
+    // Add header
+    try full_output.appendSlice(allocator, "# Changelog\n\nAll notable changes to this project will be documented in this file.\n\n");
+
+    // Process tags from newest to oldest (they're already sorted newest first)
+    const filter_config = cfg.toFilterConfig();
+    const commit_filter = filter.Filter.init(filter_config);
+    const md_config = cfg.toMarkdownConfig();
+
+    for (all_tags, 0..) |tag, i| {
+        // Determine the previous tag (older version)
+        const from_ref: ?[]const u8 = if (i + 1 < all_tags.len) all_tags[i + 1] else null;
+
+        if (!args.quiet) {
+            var buf: [256]u8 = undefined;
+            if (from_ref) |from| {
+                const msg = std.fmt.bufPrint(&buf, "  Processing {s} ({s}..{s})\n", .{ tag, from, tag }) catch "";
+                try stderr.writeAll(msg);
+            } else {
+                const msg = std.fmt.bufPrint(&buf, "  Processing {s} (initial release)\n", .{tag}) catch "";
+                try stderr.writeAll(msg);
+            }
+        }
+
+        // Get commits for this version
+        const raw_commits = git_repo.getCommits(from_ref, tag) catch |err| {
+            if (err == error.RefNotFound) {
+                // Skip this version if refs are invalid
+                continue;
+            }
+            return err;
+        };
+        defer {
+            for (raw_commits) |*rc| {
+                var commit = rc.*;
+                commit.deinit(allocator);
+            }
+            allocator.free(raw_commits);
+        }
+
+        // Parse commits
+        const parsed_commits = try parser.parseRawCommits(allocator, raw_commits);
+        defer {
+            for (parsed_commits) |*pc| {
+                var commit = pc.*;
+                commit.deinit(allocator);
+            }
+            allocator.free(parsed_commits);
+        }
+
+        // Filter commits
+        var stats = filter.FilterStats{};
+        defer stats.deinit(allocator);
+
+        const filtered_commits = try commit_filter.filterCommitsWithStats(allocator, parsed_commits, &stats);
+        defer allocator.free(filtered_commits);
+
+        // Get tag date from the tag's commit
+        const tag_date = blk: {
+            const tag_commit = git_repo.showCommit(tag) catch {
+                break :blk "YYYY-MM-DD";
+            };
+            defer {
+                var tc = tag_commit;
+                tc.deinit(allocator);
+            }
+            // Extract just the date part (YYYY-MM-DD) from ISO format
+            if (tag_commit.date.len >= 10) {
+                break :blk tag_commit.date[0..10];
+            }
+            break :blk "YYYY-MM-DD";
+        };
+
+        // Create changelog entry for this version
+        var entry = try changelog.ChangelogEntry.init(allocator, tag, tag_date);
+        defer entry.deinit();
+
+        for (filtered_commits) |commit| {
+            try entry.addCommit(commit);
+        }
+
+        // Format and append to full output
+        const entry_output = try markdown.formatEntryWithConfig(allocator, &entry, md_config);
+        defer allocator.free(entry_output);
+
+        try full_output.appendSlice(allocator, entry_output);
+        try full_output.appendSlice(allocator, "\n");
+    }
+
+    // Output
+    if (args.dry_run) {
+        try stdout.writeAll(full_output.items);
+    } else {
+        const output_path = args.output_path orelse "CHANGELOG.md";
+
+        // For full regeneration, we overwrite the entire file
+        const cwd = std.fs.cwd();
+        const file = try cwd.createFile(output_path, .{});
+        defer file.close();
+        try file.writeAll(full_output.items);
+
+        if (!args.quiet) {
+            var buf: [256]u8 = undefined;
+            const msg = std.fmt.bufPrint(&buf, "Wrote full changelog to {s}\n", .{output_path}) catch "";
             try stderr.writeAll(msg);
         }
     }
@@ -629,6 +800,7 @@ fn printHelp() void {
         \\    -o, --output <PATH>  Output file (default: CHANGELOG.md)
         \\    -f, --format <FMT>   Output format: markdown, json, github
         \\    --dry-run            Print to stdout instead of writing to file
+        \\    --full               Regenerate full changelog from all tags
         \\
         \\LINT OPTIONS:
         \\    --from <TAG>         Start of commit range (exclusive)
@@ -638,6 +810,7 @@ fn printHelp() void {
         \\    chronicle init                      Create chronicle.toml
         \\    chronicle generate                  Generate changelog for latest tag
         \\    chronicle generate --dry-run       Preview changelog without writing
+        \\    chronicle generate --full          Regenerate changelog from all tags
         \\    chronicle lint                      Check commit messages since last tag
         \\    chronicle preview                   Show unreleased changes
         \\    chronicle generate -f github       Generate GitHub-style release notes

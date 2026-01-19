@@ -95,16 +95,16 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 - [x] Implement `chronicle init` - create default chronicle.toml
 - [x] Implement `chronicle lint` - validate commit message format
 - [x] Implement `chronicle preview` - show unreleased changes
-- [ ] Add --full flag for full changelog regeneration
+- [x] Add --full flag for full changelog regeneration
 - [x] Implement --help with usage documentation
 
 ## Phase 12: Claude Code Skill (Basic)
 
-- [ ] Create ~/.claude/skills/changelog.md skill file
-- [ ] Implement CLI detection (which chronicle)
-- [ ] Call chronicle generate --format json --dry-run
-- [ ] Parse JSON output for structured data
-- [ ] Format basic output for user review
+- [x] Create ~/.claude/skills/changelog.md skill file
+- [x] Implement CLI detection (which chronicle)
+- [x] Call chronicle generate --format json --dry-run
+- [x] Parse JSON output for structured data
+- [x] Format basic output for user review
 
 ## Phase 13: Skill Enhancement Features
 
