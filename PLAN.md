@@ -28,57 +28,57 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 
 ## Phase 4: Conventional Commit Parser
 
-- [ ] Create parser.zig module
-- [ ] Implement parseConventionalCommit() to extract type, scope, description, breaking flag
-- [ ] Implement parseCommitType() to map prefixes to CommitType enum
-- [ ] Handle scope parsing (parentheses)
-- [ ] Handle breaking change indicator (!)
-- [ ] Extract issue references from commit messages (#123 patterns)
-- [ ] Parse commit body for BREAKING CHANGE footer
+- [x] Create parser.zig module
+- [x] Implement parseConventionalCommit() to extract type, scope, description, breaking flag
+- [x] Implement parseCommitType() to map prefixes to CommitType enum
+- [x] Handle scope parsing (parentheses)
+- [x] Handle breaking change indicator (!)
+- [x] Extract issue references from commit messages (#123 patterns)
+- [x] Parse commit body for BREAKING CHANGE footer
 
 ## Phase 5: Filtering Logic
 
-- [ ] Create filter.zig module
-- [ ] Implement default exclusion rules (chore, test, ci, build, merge commits)
-- [ ] Implement pattern-based exclusion (wip, fixup, squash, typo, [skip changelog])
-- [ ] Implement scope-based exclusion
-- [ ] Implement shouldInclude() predicate combining all rules
-- [ ] Track exclusion stats by category
+- [x] Create filter.zig module
+- [x] Implement default exclusion rules (chore, test, ci, build, merge commits)
+- [x] Implement pattern-based exclusion (wip, fixup, squash, typo, [skip changelog])
+- [x] Implement scope-based exclusion
+- [x] Implement shouldInclude() predicate combining all rules
+- [x] Track exclusion stats by category
 
 ## Phase 6: Markdown Output
 
-- [ ] Create format/markdown.zig module
-- [ ] Implement section grouping (Added, Fixed, Changed, etc.)
-- [ ] Generate standard Keep-a-Changelog format
-- [ ] Support commit hash linking
-- [ ] Support issue linking (#123 → GitHub URL)
-- [ ] Handle empty sections gracefully
+- [x] Create format/markdown.zig module
+- [x] Implement section grouping (Added, Fixed, Changed, etc.)
+- [x] Generate standard Keep-a-Changelog format
+- [x] Support commit hash linking
+- [x] Support issue linking (#123 → GitHub URL)
+- [x] Handle empty sections gracefully
 
 ## Phase 7: Generate Command
 
-- [ ] Wire up `chronicle generate` in main.zig
-- [ ] Implement --dry-run (stdout output)
-- [ ] Implement --version flag
-- [ ] Implement --from and --to flags
-- [ ] Implement --output flag
-- [ ] Implement file writing (prepend to existing CHANGELOG.md)
-- [ ] Add --quiet flag for suppressing info messages
+- [x] Wire up `chronicle generate` in main.zig
+- [x] Implement --dry-run (stdout output)
+- [x] Implement --version flag
+- [x] Implement --from and --to flags
+- [x] Implement --output flag
+- [x] Implement file writing (prepend to existing CHANGELOG.md)
+- [x] Add --quiet flag for suppressing info messages
 
 ## Phase 8: JSON Output Format
 
-- [ ] Create format/json.zig module
-- [ ] Output structured JSON matching design spec
-- [ ] Include version, date, sections, stats
-- [ ] Include commit metadata (hash, scope, author, issues)
-- [ ] Add --format json flag to generate command
+- [x] Create format/json.zig module
+- [x] Output structured JSON matching design spec
+- [x] Include version, date, sections, stats
+- [x] Include commit metadata (hash, scope, author, issues)
+- [x] Add --format json flag to generate command
 
 ## Phase 9: GitHub Releases Format
 
-- [ ] Create format/github.zig module
-- [ ] Generate GitHub-flavored markdown ("What's Changed" format)
-- [ ] Include PR/issue links
-- [ ] Add "Full Changelog" comparison link
-- [ ] Add --format github flag to generate command
+- [x] Create format/github.zig module
+- [x] Generate GitHub-flavored markdown ("What's Changed" format)
+- [x] Include PR/issue links
+- [x] Add "Full Changelog" comparison link
+- [x] Add --format github flag to generate command
 
 ## Phase 10: Configuration System
 

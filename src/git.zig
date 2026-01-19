@@ -96,8 +96,9 @@ pub const Git = struct {
 
         try child.spawn();
 
-        const stdout = child.stdout.?.reader();
-        const stderr = child.stderr.?.reader();
+        // Use deprecatedReader for Zig 0.15+ compatibility with readAllAlloc
+        const stdout = child.stdout.?.deprecatedReader();
+        const stderr = child.stderr.?.deprecatedReader();
 
         const stdout_content = stdout.readAllAlloc(self.allocator, 10 * 1024 * 1024) catch |err| {
             _ = child.wait() catch {};
