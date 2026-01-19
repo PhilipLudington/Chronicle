@@ -108,13 +108,13 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 
 ## Phase 13: Skill Enhancement Features
 
-- [ ] Read existing CHANGELOG.md to detect style
-- [ ] Read diffs for vague commit messages (git show)
-- [ ] Enhance descriptions with context from diffs
-- [ ] Match formatting style to existing changelog
-- [ ] Present draft with stats for user approval
-- [ ] Handle user feedback and revisions
-- [ ] Write final output via Edit tool
+- [x] Read existing CHANGELOG.md to detect style
+- [x] Read diffs for vague commit messages (git show)
+- [x] Enhance descriptions with context from diffs
+- [x] Match formatting style to existing changelog
+- [x] Present draft with stats for user approval
+- [x] Handle user feedback and revisions
+- [x] Write final output via Edit tool
 
 ## Phase 14: Skill Edge Cases
 
