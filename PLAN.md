@@ -18,13 +18,13 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 
 ## Phase 3: Git Integration
 
-- [ ] Create git.zig module
-- [ ] Implement runCommand helper to shell out to git
-- [ ] Implement getTags() to list version tags sorted by version
-- [ ] Implement getCommits(from, to) to get commit range
-- [ ] Implement getLatestTag() for default version detection
-- [ ] Implement getPreviousTag(tag) for determining commit range
-- [ ] Add git show wrapper for reading individual commits
+- [x] Create git.zig module
+- [x] Implement runCommand helper to shell out to git
+- [x] Implement getTags() to list version tags sorted by version
+- [x] Implement getCommits(from, to) to get commit range
+- [x] Implement getLatestTag() for default version detection
+- [x] Implement getPreviousTag(tag) for determining commit range
+- [x] Add git show wrapper for reading individual commits
 
 ## Phase 4: Conventional Commit Parser
 
