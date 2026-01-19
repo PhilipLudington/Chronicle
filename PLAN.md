@@ -118,10 +118,10 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 
 ## Phase 14: Skill Edge Cases
 
-- [ ] Implement fallback to raw git when CLI unavailable
-- [ ] Handle non-conventional commit projects
-- [ ] Handle ambiguous commits with user prompts
-- [ ] Handle large releases (50+ commits) with grouping suggestions
+- [x] Implement fallback to raw git when CLI unavailable
+- [x] Handle non-conventional commit projects
+- [x] Handle ambiguous commits with user prompts
+- [x] Handle large releases (50+ commits) with grouping suggestions
 
 ## Phase 15: Advanced Features
 
