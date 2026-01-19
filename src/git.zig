@@ -338,7 +338,8 @@ fn parseCommits(allocator: Allocator, output: []const u8) ![]RawCommit {
     // Split by double null (record separator)
     var records = std.mem.splitSequence(u8, output, "\x00\x00");
     while (records.next()) |record| {
-        const trimmed = std.mem.trim(u8, record, " \t\n\r");
+        // Trim whitespace and null bytes (trailing nulls can occur after last record)
+        const trimmed = std.mem.trim(u8, record, " \t\n\r\x00");
         if (trimmed.len == 0) continue;
 
         const commit = try parseCommitRecord(allocator, trimmed);

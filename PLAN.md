@@ -92,11 +92,11 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 
 ## Phase 11: Additional CLI Commands
 
-- [ ] Implement `chronicle init` - create default chronicle.toml
-- [ ] Implement `chronicle lint` - validate commit message format
-- [ ] Implement `chronicle preview` - show unreleased changes
+- [x] Implement `chronicle init` - create default chronicle.toml
+- [x] Implement `chronicle lint` - validate commit message format
+- [x] Implement `chronicle preview` - show unreleased changes
 - [ ] Add --full flag for full changelog regeneration
-- [ ] Implement --help with usage documentation
+- [x] Implement --help with usage documentation
 
 ## Phase 12: Claude Code Skill (Basic)
 
