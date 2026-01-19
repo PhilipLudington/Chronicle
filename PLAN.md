@@ -12,9 +12,9 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 
 ## Phase 2: Core Types and Data Structures
 
-- [ ] Create changelog.zig with core types (Commit, CommitType enum, ChangelogEntry, Stats)
-- [ ] Implement memory management patterns (allocators, arena allocation)
-- [ ] Add string utilities for commit parsing
+- [x] Create changelog.zig with core types (Commit, CommitType enum, ChangelogEntry, Stats)
+- [x] Implement memory management patterns (allocators, arena allocation)
+- [x] Add string utilities for commit parsing
 
 ## Phase 3: Git Integration
 
