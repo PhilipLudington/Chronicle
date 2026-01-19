@@ -132,12 +132,12 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 
 ## Phase 16: Testing and Polish
 
-- [ ] Test CLI with various conventional commit formats
-- [ ] Test edge cases (no tags, no commits, malformed commits)
-- [ ] Test all output formats
-- [ ] Test configuration loading
-- [ ] Add error messages for common failure cases
-- [ ] Document usage in README.md
+- [x] Test CLI with various conventional commit formats
+- [x] Test edge cases (no tags, no commits, malformed commits)
+- [x] Test all output formats
+- [x] Test configuration loading
+- [x] Add error messages for common failure cases
+- [x] Document usage in README.md
 
 ---
 

@@ -53,13 +53,23 @@ const Args = struct {
     };
 };
 
-pub fn main() !void {
+pub fn main() void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
-    const args = try parseArgs(allocator);
+    const args = parseArgs(allocator) catch |err| {
+        printError(err, "Failed to parse arguments");
+        std.process.exit(1);
+    };
 
+    runCommand(allocator, args) catch |err| {
+        handleError(err, args);
+        std.process.exit(1);
+    };
+}
+
+fn runCommand(allocator: std.mem.Allocator, args: Args) !void {
     switch (args.command) {
         .generate => {
             if (args.full) {
@@ -82,6 +92,39 @@ pub fn main() !void {
         .help => printHelp(),
         .version => printVersion(),
     }
+}
+
+fn handleError(err: anyerror, args: Args) void {
+    const stderr = std.fs.File.stderr();
+    var buf: [512]u8 = undefined;
+
+    const msg: []const u8 = switch (err) {
+        error.RefNotFound => "Error: Git reference not found. Check that the specified tag or commit exists.",
+        error.NotARepository => "Error: Not a git repository. Run this command from inside a git repository.",
+        error.NoTagsFound => "Error: No tags found in repository. Create a tag first or use --version-tag.",
+        error.NoVersion => "Error: No version specified and no tags found. Use --version-tag to specify a version.",
+        error.CommandFailed => "Error: Git command failed. Ensure git is installed and working.",
+        error.GitNotFound => "Error: Git not found. Please install git and ensure it's in your PATH.",
+        error.FileNotFound => blk: {
+            if (args.config_path) |path| {
+                break :blk std.fmt.bufPrint(&buf, "Error: Config file not found: {s}", .{path}) catch "Error: Config file not found.";
+            }
+            break :blk "Error: File not found.";
+        },
+        error.OutOfMemory => "Error: Out of memory.",
+        error.ParseError => "Error: Failed to parse git output.",
+        else => std.fmt.bufPrint(&buf, "Error: {s}", .{@errorName(err)}) catch "Error: Unknown error occurred.",
+    };
+
+    stderr.writeAll(msg) catch {};
+    stderr.writeAll("\n") catch {};
+}
+
+fn printError(err: anyerror, context: []const u8) void {
+    const stderr = std.fs.File.stderr();
+    var buf: [256]u8 = undefined;
+    const msg = std.fmt.bufPrint(&buf, "{s}: {s}\n", .{ context, @errorName(err) }) catch "Error occurred\n";
+    stderr.writeAll(msg) catch {};
 }
 
 fn parseArgs(allocator: std.mem.Allocator) !Args {
