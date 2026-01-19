@@ -1,8 +1,8 @@
 .{
-    .name = .myproject,
+    .name = .chronicle,
     .version = "0.1.0",
-    .fingerprint = 0x0,  // Replace with actual fingerprint from `zig build`
-    .minimum_zig_version = "0.15.0",
+    .fingerprint = 0xdc91dbec367efdba,
+    .minimum_zig_version = "0.13.0",
     .dependencies = .{},
     .paths = .{
         "build.zig",

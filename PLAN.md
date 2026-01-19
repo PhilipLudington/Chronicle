@@ -4,11 +4,11 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 
 ## Phase 1: Project Setup
 
-- [ ] Create build.zig with standard Zig 0.13+ configuration
-- [ ] Create build.zig.zon with project metadata
-- [ ] Set up source directory structure (src/, src/format/)
-- [ ] Create main.zig entry point with CLI argument parsing skeleton
-- [ ] Add .gitignore for Zig build artifacts (zig-out/, zig-cache/)
+- [x] Create build.zig with standard Zig 0.13+ configuration
+- [x] Create build.zig.zon with project metadata
+- [x] Set up source directory structure (src/, src/format/)
+- [x] Create main.zig entry point with CLI argument parsing skeleton
+- [x] Add .gitignore for Zig build artifacts (zig-out/, zig-cache/)
 
 ## Phase 2: Core Types and Data Structures
 
