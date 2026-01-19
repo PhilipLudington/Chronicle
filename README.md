@@ -18,7 +18,7 @@ A changelog generator for projects using [Conventional Commits](https://www.conv
 
 ### Build from source
 
-Requires [Zig 0.13+](https://ziglang.org/download/):
+Requires [Zig 0.15+](https://ziglang.org/download/):
 
 ```bash
 git clone https://github.com/your-username/chronicle.git

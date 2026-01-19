@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Chronicle is a changelog generator with a Zig CLI core and Claude Code skill wrapper. The CLI parses conventional commits, filters noise, and outputs structured changelog entries. The skill wraps the CLI with AI intelligence for polished release notes.
 
-**Status**: Planning phase - core implementation not yet started.
+**Status**: Complete - all 16 implementation phases finished. Requires Zig 0.15+.
 
 ## Build Commands
 
@@ -24,7 +24,6 @@ Build options:
 
 ## Architecture
 
-**Planned structure** (from DESIGN.md):
 ```
 src/
 ├── main.zig           # Entry point, CLI argument parsing
@@ -33,6 +32,10 @@ src/
 ├── filter.zig         # Commit filtering logic
 ├── changelog.zig      # Core data structures (Commit, CommitType, ChangelogEntry)
 ├── config.zig         # TOML config loading
+├── grouper.zig        # Commit grouping by scope
+├── highlights.zig     # Notable change detection
+├── monorepo.zig       # Package filtering for monorepos
+├── github_api.zig     # GitHub PR description fetching
 └── format/
     ├── markdown.zig   # Keep-a-Changelog markdown output
     ├── json.zig       # JSON output for skill consumption
