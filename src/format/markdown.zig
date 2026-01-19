@@ -5,6 +5,9 @@ const changelog = @import("../changelog.zig");
 const ChangelogEntry = changelog.ChangelogEntry;
 const Section = changelog.Section;
 const Commit = changelog.Commit;
+const CommitGroup = changelog.CommitGroup;
+const Highlight = changelog.Highlight;
+const HighlightReason = changelog.HighlightReason;
 
 /// Configuration for markdown output.
 pub const MarkdownConfig = struct {
@@ -62,13 +65,18 @@ pub const MarkdownFormatter = struct {
         // Header: ## [version] - date
         try self.appendHeader(&output, entry);
 
+        // Highlights section (if any)
+        if (entry.highlights.items.len > 0) {
+            try self.appendHighlights(&output, entry.highlights.items);
+        }
+
         // Sections in standard order
         const section_order = ChangelogEntry.getSectionOrder();
-        var has_content = false;
+        var has_content = entry.highlights.items.len > 0;
 
         for (section_order) |section_name| {
             if (entry.sections.get(section_name)) |section| {
-                if (section.commits.items.len > 0) {
+                if (section.commits.items.len > 0 or section.groups.count() > 0) {
                     try self.appendSection(&output, section);
                     has_content = true;
                 }
@@ -85,7 +93,7 @@ pub const MarkdownFormatter = struct {
                     break;
                 }
             }
-            if (!in_order and kv.value_ptr.commits.items.len > 0) {
+            if (!in_order and (kv.value_ptr.commits.items.len > 0 or kv.value_ptr.groups.count() > 0)) {
                 try self.appendSection(&output, kv.value_ptr.*);
                 has_content = true;
             }
@@ -110,10 +118,77 @@ pub const MarkdownFormatter = struct {
     fn appendSection(self: *const Self, output: *std.ArrayListUnmanaged(u8), section: Section) !void {
         try output.appendSlice(self.allocator, "\n### ");
         try output.appendSlice(self.allocator, section.name);
-        try output.appendSlice(self.allocator, "\n\n");
+        try output.appendSlice(self.allocator, "\n");
 
-        for (section.commits.items) |commit| {
+        // Render groups first if section is grouped
+        if (section.grouped and section.groups.count() > 0) {
+            var group_iter = section.groups.iterator();
+            while (group_iter.next()) |group_entry| {
+                try self.appendGroup(output, group_entry.value_ptr.*);
+            }
+        }
+
+        // Render ungrouped/remaining commits
+        if (section.commits.items.len > 0) {
+            try output.appendSlice(self.allocator, "\n");
+            for (section.commits.items) |commit| {
+                try self.appendCommit(output, commit);
+            }
+        }
+    }
+
+    fn appendGroup(self: *const Self, output: *std.ArrayListUnmanaged(u8), group: CommitGroup) !void {
+        // Skip empty groups
+        if (group.commits.items.len == 0) return;
+
+        try output.appendSlice(self.allocator, "\n**");
+        if (group.label) |label| {
+            try output.appendSlice(self.allocator, label);
+        } else if (group.name.len > 0) {
+            // Capitalize first letter of scope for display
+            var name_buf: [64]u8 = undefined;
+            if (group.name.len <= name_buf.len) {
+                @memcpy(name_buf[0..group.name.len], group.name);
+                if (std.ascii.isLower(name_buf[0])) {
+                    name_buf[0] = std.ascii.toUpper(name_buf[0]);
+                }
+                try output.appendSlice(self.allocator, name_buf[0..group.name.len]);
+            } else {
+                try output.appendSlice(self.allocator, group.name);
+            }
+        } else {
+            try output.appendSlice(self.allocator, "Other");
+        }
+        try output.appendSlice(self.allocator, "**\n");
+
+        for (group.commits.items) |commit| {
             try self.appendCommit(output, commit);
+        }
+    }
+
+    fn appendHighlights(self: *const Self, output: *std.ArrayListUnmanaged(u8), highlights: []const Highlight) !void {
+        try output.appendSlice(self.allocator, "\n### Highlights\n\n");
+
+        for (highlights) |highlight| {
+            try output.appendSlice(self.allocator, "- ");
+
+            // Add reason label
+            switch (highlight.reason) {
+                .breaking_change => try output.appendSlice(self.allocator, "**BREAKING** "),
+                .security_fix => try output.appendSlice(self.allocator, "**SECURITY** "),
+                .deprecation => try output.appendSlice(self.allocator, "**DEPRECATED** "),
+                .performance_improvement => try output.appendSlice(self.allocator, "**PERF** "),
+                .major_feature => {},
+            }
+
+            // Add summary or commit description
+            if (highlight.summary) |summary| {
+                try output.appendSlice(self.allocator, summary);
+            } else if (highlight.commit) |commit| {
+                try output.appendSlice(self.allocator, commit.description);
+            }
+
+            try output.appendSlice(self.allocator, "\n");
         }
     }
 

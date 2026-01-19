@@ -6,6 +6,10 @@ const ChangelogEntry = changelog.ChangelogEntry;
 const Section = changelog.Section;
 const Commit = changelog.Commit;
 const Stats = changelog.Stats;
+const CommitGroup = changelog.CommitGroup;
+const Highlight = changelog.Highlight;
+const HighlightReason = changelog.HighlightReason;
+const PRInfo = changelog.PRInfo;
 
 /// JSON formatter for changelog entries.
 /// Produces structured JSON suitable for machine consumption and skill integration.
@@ -32,6 +36,30 @@ pub const JsonFormatter = struct {
         try self.appendString(&output, "  \"date\": ", entry.date);
         try output.appendSlice(self.allocator, ",\n");
 
+        // Package filter (for monorepo support)
+        try output.appendSlice(self.allocator, "  \"package\": ");
+        if (entry.package_filter) |pkg| {
+            try output.append(self.allocator, '"');
+            try self.appendEscaped(&output, pkg);
+            try output.append(self.allocator, '"');
+        } else {
+            try output.appendSlice(self.allocator, "null");
+        }
+        try output.appendSlice(self.allocator, ",\n");
+
+        // Highlights array
+        try output.appendSlice(self.allocator, "  \"highlights\": [\n");
+        for (entry.highlights.items, 0..) |highlight, i| {
+            if (i > 0) {
+                try output.appendSlice(self.allocator, ",\n");
+            }
+            try self.appendHighlight(&output, highlight);
+        }
+        if (entry.highlights.items.len > 0) {
+            try output.appendSlice(self.allocator, "\n");
+        }
+        try output.appendSlice(self.allocator, "  ],\n");
+
         // Sections array
         try output.appendSlice(self.allocator, "  \"sections\": [\n");
 
@@ -40,7 +68,7 @@ pub const JsonFormatter = struct {
 
         for (section_order) |section_name| {
             if (entry.sections.get(section_name)) |section| {
-                if (section.commits.items.len > 0) {
+                if (section.commits.items.len > 0 or section.groups.count() > 0) {
                     if (!first_section) {
                         try output.appendSlice(self.allocator, ",\n");
                     }
@@ -60,7 +88,7 @@ pub const JsonFormatter = struct {
                     break;
                 }
             }
-            if (!in_order and kv.value_ptr.commits.items.len > 0) {
+            if (!in_order and (kv.value_ptr.commits.items.len > 0 or kv.value_ptr.groups.count() > 0)) {
                 if (!first_section) {
                     try output.appendSlice(self.allocator, ",\n");
                 }
@@ -70,6 +98,22 @@ pub const JsonFormatter = struct {
         }
 
         try output.appendSlice(self.allocator, "\n  ],\n");
+
+        // PR metadata
+        try output.appendSlice(self.allocator, "  \"pr_metadata\": {\n");
+        var pr_iter = entry.pr_metadata.iterator();
+        var first_pr = true;
+        while (pr_iter.next()) |pr_entry| {
+            if (!first_pr) {
+                try output.appendSlice(self.allocator, ",\n");
+            }
+            try self.appendPRMetadata(&output, pr_entry.key_ptr.*, pr_entry.value_ptr.*);
+            first_pr = false;
+        }
+        if (!first_pr) {
+            try output.appendSlice(self.allocator, "\n");
+        }
+        try output.appendSlice(self.allocator, "  },\n");
 
         // Stats
         try output.appendSlice(self.allocator, "  \"stats\": {\n");
@@ -87,6 +131,33 @@ pub const JsonFormatter = struct {
         try output.appendSlice(self.allocator, "    {\n");
         try self.appendString(output, "      \"name\": ", section.name);
         try output.appendSlice(self.allocator, ",\n");
+
+        // Add grouped flag
+        try output.appendSlice(self.allocator, "      \"grouped\": ");
+        if (section.grouped) {
+            try output.appendSlice(self.allocator, "true");
+        } else {
+            try output.appendSlice(self.allocator, "false");
+        }
+        try output.appendSlice(self.allocator, ",\n");
+
+        // Add groups if any
+        try output.appendSlice(self.allocator, "      \"groups\": [\n");
+        var group_iter = section.groups.iterator();
+        var first_group = true;
+        while (group_iter.next()) |group_entry| {
+            if (!first_group) {
+                try output.appendSlice(self.allocator, ",\n");
+            }
+            try self.appendGroup(output, group_entry.value_ptr.*);
+            first_group = false;
+        }
+        if (!first_group) {
+            try output.appendSlice(self.allocator, "\n");
+        }
+        try output.appendSlice(self.allocator, "      ],\n");
+
+        // Add commits
         try output.appendSlice(self.allocator, "      \"commits\": [\n");
 
         for (section.commits.items, 0..) |commit, i| {
@@ -96,7 +167,106 @@ pub const JsonFormatter = struct {
             try self.appendCommit(output, commit);
         }
 
-        try output.appendSlice(self.allocator, "\n      ]\n");
+        if (section.commits.items.len > 0) {
+            try output.appendSlice(self.allocator, "\n");
+        }
+        try output.appendSlice(self.allocator, "      ]\n");
+        try output.appendSlice(self.allocator, "    }");
+    }
+
+    fn appendGroup(self: *const Self, output: *std.ArrayListUnmanaged(u8), group: CommitGroup) !void {
+        try output.appendSlice(self.allocator, "        {\n");
+        try self.appendString(output, "          \"name\": ", group.name);
+        try output.appendSlice(self.allocator, ",\n");
+
+        try output.appendSlice(self.allocator, "          \"label\": ");
+        if (group.label) |label| {
+            try output.append(self.allocator, '"');
+            try self.appendEscaped(output, label);
+            try output.append(self.allocator, '"');
+        } else {
+            try output.appendSlice(self.allocator, "null");
+        }
+        try output.appendSlice(self.allocator, ",\n");
+
+        try output.appendSlice(self.allocator, "          \"commits\": [\n");
+        for (group.commits.items, 0..) |commit, i| {
+            if (i > 0) {
+                try output.appendSlice(self.allocator, ",\n");
+            }
+            try self.appendCommitIndented(output, commit, "            ");
+        }
+        if (group.commits.items.len > 0) {
+            try output.appendSlice(self.allocator, "\n");
+        }
+        try output.appendSlice(self.allocator, "          ]\n");
+        try output.appendSlice(self.allocator, "        }");
+    }
+
+    fn appendHighlight(self: *const Self, output: *std.ArrayListUnmanaged(u8), highlight: Highlight) !void {
+        try output.appendSlice(self.allocator, "    {\n");
+
+        // Reason/type
+        try self.appendString(output, "      \"type\": ", @tagName(highlight.reason));
+        try output.appendSlice(self.allocator, ",\n");
+
+        // Commit hash (if available)
+        try output.appendSlice(self.allocator, "      \"commit_hash\": ");
+        if (highlight.commit) |commit| {
+            try output.append(self.allocator, '"');
+            try self.appendEscaped(output, commit.hash);
+            try output.append(self.allocator, '"');
+        } else {
+            try output.appendSlice(self.allocator, "null");
+        }
+        try output.appendSlice(self.allocator, ",\n");
+
+        // Summary
+        try output.appendSlice(self.allocator, "      \"summary\": ");
+        if (highlight.summary) |summary| {
+            try output.append(self.allocator, '"');
+            try self.appendEscaped(output, summary);
+            try output.append(self.allocator, '"');
+        } else {
+            try output.appendSlice(self.allocator, "null");
+        }
+        try output.appendSlice(self.allocator, "\n");
+
+        try output.appendSlice(self.allocator, "    }");
+    }
+
+    fn appendPRMetadata(self: *const Self, output: *std.ArrayListUnmanaged(u8), hash: []const u8, pr_info: PRInfo) !void {
+        try output.appendSlice(self.allocator, "    \"");
+        try self.appendEscaped(output, hash);
+        try output.appendSlice(self.allocator, "\": {\n");
+
+        try self.appendNumber(output, "      \"number\": ", pr_info.number);
+        try output.appendSlice(self.allocator, ",\n");
+
+        try self.appendString(output, "      \"title\": ", pr_info.title);
+        try output.appendSlice(self.allocator, ",\n");
+
+        try output.appendSlice(self.allocator, "      \"body\": ");
+        if (pr_info.body) |body| {
+            try output.append(self.allocator, '"');
+            try self.appendEscaped(output, body);
+            try output.append(self.allocator, '"');
+        } else {
+            try output.appendSlice(self.allocator, "null");
+        }
+        try output.appendSlice(self.allocator, ",\n");
+
+        try output.appendSlice(self.allocator, "      \"labels\": [");
+        for (pr_info.labels, 0..) |label, i| {
+            if (i > 0) {
+                try output.appendSlice(self.allocator, ", ");
+            }
+            try output.append(self.allocator, '"');
+            try self.appendEscaped(output, label);
+            try output.append(self.allocator, '"');
+        }
+        try output.appendSlice(self.allocator, "]\n");
+
         try output.appendSlice(self.allocator, "    }");
     }
 
@@ -145,6 +315,47 @@ pub const JsonFormatter = struct {
         try output.appendSlice(self.allocator, "]\n");
 
         try output.appendSlice(self.allocator, "        }");
+    }
+
+    fn appendCommitIndented(self: *const Self, output: *std.ArrayListUnmanaged(u8), commit: Commit, indent: []const u8) !void {
+        try output.appendSlice(self.allocator, indent);
+        try output.appendSlice(self.allocator, "{\n");
+
+        try output.appendSlice(self.allocator, indent);
+        try self.appendString(output, "  \"hash\": ", commit.hash);
+        try output.appendSlice(self.allocator, ",\n");
+
+        try output.appendSlice(self.allocator, indent);
+        try self.appendString(output, "  \"short_hash\": ", commit.short_hash);
+        try output.appendSlice(self.allocator, ",\n");
+
+        try output.appendSlice(self.allocator, indent);
+        try self.appendString(output, "  \"type\": ", @tagName(commit.commit_type));
+        try output.appendSlice(self.allocator, ",\n");
+
+        try output.appendSlice(self.allocator, indent);
+        if (commit.scope) |scope| {
+            try self.appendString(output, "  \"scope\": ", scope);
+        } else {
+            try output.appendSlice(self.allocator, "  \"scope\": null");
+        }
+        try output.appendSlice(self.allocator, ",\n");
+
+        try output.appendSlice(self.allocator, indent);
+        try self.appendString(output, "  \"description\": ", commit.description);
+        try output.appendSlice(self.allocator, ",\n");
+
+        try output.appendSlice(self.allocator, indent);
+        try output.appendSlice(self.allocator, "  \"breaking\": ");
+        if (commit.breaking) {
+            try output.appendSlice(self.allocator, "true");
+        } else {
+            try output.appendSlice(self.allocator, "false");
+        }
+        try output.appendSlice(self.allocator, "\n");
+
+        try output.appendSlice(self.allocator, indent);
+        try output.appendSlice(self.allocator, "}");
     }
 
     fn appendString(self: *const Self, output: *std.ArrayListUnmanaged(u8), prefix: []const u8, value: []const u8) !void {

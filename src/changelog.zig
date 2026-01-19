@@ -142,6 +142,109 @@ pub const Commit = struct {
     }
 };
 
+/// Reason why a commit was highlighted.
+pub const HighlightReason = enum {
+    breaking_change,
+    major_feature,
+    security_fix,
+    performance_improvement,
+    deprecation,
+};
+
+/// Highlight for major releases.
+pub const Highlight = struct {
+    commit: ?Commit,
+    reason: HighlightReason,
+    summary: ?[]const u8,
+
+    pub fn deinit(self: *Highlight, allocator: Allocator) void {
+        if (self.commit) |*commit| {
+            var c = commit.*;
+            c.deinit(allocator);
+        }
+        if (self.summary) |s| allocator.free(s);
+        self.* = undefined;
+    }
+
+    /// Creates a clone of this highlight with owned memory.
+    pub fn clone(self: Highlight, allocator: Allocator) !Highlight {
+        const cloned_commit = if (self.commit) |c| try c.clone(allocator) else null;
+        errdefer if (cloned_commit) |*cc| {
+            var mc = cc.*;
+            mc.deinit(allocator);
+        };
+
+        const cloned_summary = if (self.summary) |s| try allocator.dupe(u8, s) else null;
+
+        return Highlight{
+            .commit = cloned_commit,
+            .reason = self.reason,
+            .summary = cloned_summary,
+        };
+    }
+};
+
+/// PR information from GitHub.
+pub const PRInfo = struct {
+    number: u32,
+    title: []const u8,
+    body: ?[]const u8,
+    labels: []const []const u8,
+
+    pub fn deinit(self: *PRInfo, allocator: Allocator) void {
+        allocator.free(self.title);
+        if (self.body) |b| allocator.free(b);
+        for (self.labels) |label| {
+            allocator.free(label);
+        }
+        allocator.free(self.labels);
+        self.* = undefined;
+    }
+
+    /// Creates a clone of this PRInfo with owned memory.
+    pub fn clone(self: PRInfo, allocator: Allocator) !PRInfo {
+        const title = try allocator.dupe(u8, self.title);
+        errdefer allocator.free(title);
+
+        const body = if (self.body) |b| try allocator.dupe(u8, b) else null;
+        errdefer if (body) |b| allocator.free(b);
+
+        const labels = try allocator.alloc([]const u8, self.labels.len);
+        errdefer allocator.free(labels);
+
+        for (self.labels, 0..) |label, i| {
+            labels[i] = try allocator.dupe(u8, label);
+        }
+
+        return PRInfo{
+            .number = self.number,
+            .title = title,
+            .body = body,
+            .labels = labels,
+        };
+    }
+};
+
+/// A group of related commits within a section (grouped by scope).
+pub const CommitGroup = struct {
+    name: []const u8,
+    label: ?[]const u8,
+    commits: std.ArrayListUnmanaged(Commit) = .{},
+
+    pub fn deinit(self: *CommitGroup, allocator: Allocator) void {
+        for (self.commits.items) |*commit| {
+            commit.deinit(allocator);
+        }
+        self.commits.deinit(allocator);
+        // name and label are not owned (references to scope strings from commits)
+        self.* = undefined;
+    }
+
+    pub fn addCommit(self: *CommitGroup, allocator: Allocator, commit: Commit) !void {
+        try self.commits.append(allocator, commit);
+    }
+};
+
 /// Statistics about commit processing.
 pub const Stats = struct {
     included: usize = 0,
@@ -175,17 +278,81 @@ pub const Stats = struct {
 pub const Section = struct {
     name: []const u8,
     commits: std.ArrayListUnmanaged(Commit) = .{},
+    /// Groups of commits organized by scope. Only populated when grouping is enabled.
+    groups: std.StringHashMapUnmanaged(CommitGroup) = .{},
+    /// Whether this section has been grouped.
+    grouped: bool = false,
 
     pub fn deinit(self: *Section, allocator: Allocator) void {
         for (self.commits.items) |*commit| {
             commit.deinit(allocator);
         }
         self.commits.deinit(allocator);
+
+        var group_iter = self.groups.valueIterator();
+        while (group_iter.next()) |group| {
+            group.deinit(allocator);
+        }
+        self.groups.deinit(allocator);
+
         self.* = undefined;
     }
 
     pub fn addCommit(self: *Section, allocator: Allocator, commit: Commit) !void {
         try self.commits.append(allocator, commit);
+    }
+
+    /// Organizes commits into groups by scope.
+    /// After calling this, commits with a scope are moved to groups,
+    /// and only ungrouped commits remain in the flat commits list.
+    pub fn groupByScope(self: *Section, allocator: Allocator, min_group_size: usize) !void {
+        if (self.grouped) return;
+
+        // Count commits per scope
+        var scope_counts = std.StringHashMapUnmanaged(usize){};
+        defer scope_counts.deinit(allocator);
+
+        for (self.commits.items) |commit| {
+            if (commit.scope) |scope| {
+                const gop = try scope_counts.getOrPut(allocator, scope);
+                if (gop.found_existing) {
+                    gop.value_ptr.* += 1;
+                } else {
+                    gop.value_ptr.* = 1;
+                }
+            }
+        }
+
+        // Create groups for scopes meeting minimum size
+        var ungrouped = std.ArrayListUnmanaged(Commit){};
+        errdefer ungrouped.deinit(allocator);
+
+        for (self.commits.items) |commit| {
+            const scope_qualifies = if (commit.scope) |scope|
+                (scope_counts.get(scope) orelse 0) >= min_group_size
+            else
+                false;
+
+            if (scope_qualifies) {
+                const scope = commit.scope.?;
+                const gop = try self.groups.getOrPut(allocator, scope);
+                if (!gop.found_existing) {
+                    gop.value_ptr.* = CommitGroup{
+                        .name = scope,
+                        .label = null,
+                    };
+                }
+                try gop.value_ptr.addCommit(allocator, commit);
+            } else {
+                try ungrouped.append(allocator, commit);
+            }
+        }
+
+        // Replace commits list with ungrouped commits
+        // Note: we don't deinit the old items as they were moved to groups
+        self.commits.deinit(allocator);
+        self.commits = ungrouped;
+        self.grouped = true;
     }
 };
 
@@ -196,6 +363,15 @@ pub const ChangelogEntry = struct {
     date: []const u8,
     sections: std.StringHashMapUnmanaged(Section) = .{},
     stats: Stats = .{},
+
+    /// Highlights for this release (breaking changes, security fixes, etc.).
+    highlights: std.ArrayListUnmanaged(Highlight) = .{},
+
+    /// Package filter for monorepo support. Null means all packages.
+    package_filter: ?[]const u8 = null,
+
+    /// PR metadata keyed by commit hash.
+    pr_metadata: std.StringHashMapUnmanaged(PRInfo) = .{},
 
     pub fn init(allocator: Allocator, version: []const u8, date: []const u8) !ChangelogEntry {
         const owned_version = try allocator.dupe(u8, version);
@@ -217,6 +393,22 @@ pub const ChangelogEntry = struct {
         }
         self.sections.deinit(self.allocator);
         self.stats.deinit(self.allocator);
+
+        // Clean up highlights
+        for (self.highlights.items) |*highlight| {
+            highlight.deinit(self.allocator);
+        }
+        self.highlights.deinit(self.allocator);
+
+        // Clean up PR metadata
+        var pr_iter = self.pr_metadata.valueIterator();
+        while (pr_iter.next()) |pr_info| {
+            pr_info.deinit(self.allocator);
+        }
+        self.pr_metadata.deinit(self.allocator);
+
+        // Clean up package filter
+        if (self.package_filter) |pf| self.allocator.free(pf);
 
         self.allocator.free(self.version);
         self.allocator.free(self.date);
@@ -257,6 +449,42 @@ pub const ChangelogEntry = struct {
             "Documentation",
             "Other",
         };
+    }
+
+    /// Adds a highlight to this changelog entry.
+    /// Clones the highlight, so the caller retains ownership of the original.
+    pub fn addHighlight(self: *ChangelogEntry, highlight: Highlight) !void {
+        const cloned = try highlight.clone(self.allocator);
+        try self.highlights.append(self.allocator, cloned);
+    }
+
+    /// Adds PR metadata for a commit hash.
+    /// Clones the PRInfo, so the caller retains ownership of the original.
+    pub fn addPRMetadata(self: *ChangelogEntry, hash: []const u8, pr_info: PRInfo) !void {
+        const owned_hash = try self.allocator.dupe(u8, hash);
+        errdefer self.allocator.free(owned_hash);
+
+        const cloned = try pr_info.clone(self.allocator);
+        try self.pr_metadata.put(self.allocator, owned_hash, cloned);
+    }
+
+    /// Sets the package filter for monorepo support.
+    pub fn setPackageFilter(self: *ChangelogEntry, package: []const u8) !void {
+        if (self.package_filter) |pf| self.allocator.free(pf);
+        self.package_filter = try self.allocator.dupe(u8, package);
+    }
+
+    /// Groups all sections by scope.
+    pub fn groupAllSections(self: *ChangelogEntry, min_group_size: usize) !void {
+        var iter = self.sections.valueIterator();
+        while (iter.next()) |section| {
+            try section.groupByScope(self.allocator, min_group_size);
+        }
+    }
+
+    /// Returns true if this entry has any highlights.
+    pub fn hasHighlights(self: *const ChangelogEntry) bool {
+        return self.highlights.items.len > 0;
     }
 };
 

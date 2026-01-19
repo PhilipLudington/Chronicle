@@ -9,6 +9,16 @@ const FilterConfig = filter_mod.FilterConfig;
 const markdown_mod = @import("format/markdown.zig");
 const MarkdownConfig = markdown_mod.MarkdownConfig;
 
+const grouper_mod = @import("grouper.zig");
+const GroupingStrategy = grouper_mod.GroupingStrategy;
+const GroupingConfig = grouper_mod.GroupingConfig;
+
+const highlights_mod = @import("highlights.zig");
+const HighlightCriteria = highlights_mod.HighlightCriteria;
+
+const monorepo_mod = @import("monorepo.zig");
+const MonorepoConfig = monorepo_mod.MonorepoConfig;
+
 /// Configuration error types.
 pub const ConfigError = error{
     InvalidSyntax,
@@ -34,6 +44,9 @@ pub const Config = struct {
 
     // Repository info (for linking)
     repository: RepositoryConfig = .{},
+
+    // Advanced features (Phase 15)
+    advanced: AdvancedConfig = .{},
 
     // Allocated strings that need cleanup
     owned_strings: std.ArrayListUnmanaged([]const u8) = .{},
@@ -96,6 +109,41 @@ pub const Config = struct {
             .show_scope = self.format.show_scope,
         };
     }
+
+    /// Converts this config to a GroupingConfig.
+    pub fn toGroupingConfig(self: *const Self) GroupingConfig {
+        const strategy = if (std.mem.eql(u8, self.advanced.grouping.strategy, "scope"))
+            GroupingStrategy.by_scope
+        else if (std.mem.eql(u8, self.advanced.grouping.strategy, "keyword"))
+            GroupingStrategy.by_keyword
+        else
+            GroupingStrategy.none;
+
+        return .{
+            .strategy = strategy,
+            .min_group_size = self.advanced.grouping.min_group_size,
+        };
+    }
+
+    /// Converts this config to a HighlightCriteria.
+    pub fn toHighlightCriteria(self: *const Self) HighlightCriteria {
+        return .{
+            .include_breaking = self.advanced.highlights.include_breaking,
+            .include_security = self.advanced.highlights.include_security,
+            .include_deprecations = self.advanced.highlights.include_deprecations,
+            .include_performance = self.advanced.highlights.include_performance,
+            .highlighted_scopes = self.advanced.highlights.highlighted_scopes,
+        };
+    }
+
+    /// Converts this config to a MonorepoConfig.
+    pub fn toMonorepoConfig(self: *const Self) MonorepoConfig {
+        return .{
+            .enabled = self.advanced.monorepo.enabled,
+            .package_prefixes = self.advanced.monorepo.package_prefixes,
+            .per_package_changelogs = self.advanced.monorepo.per_package_changelogs,
+        };
+    }
 };
 
 /// Section name customization.
@@ -136,6 +184,62 @@ pub const RepositoryConfig = struct {
 
     /// Base URL for issue links. Auto-generated from url if not set.
     issue_url_base: ?[]const u8 = null,
+};
+
+/// Advanced configuration for Phase 15 features.
+pub const AdvancedConfig = struct {
+    /// Commit grouping configuration.
+    grouping: GroupingOptions = .{},
+    /// Highlight generation configuration.
+    highlights: HighlightOptions = .{},
+    /// Monorepo support configuration.
+    monorepo: MonorepoOptions = .{},
+    /// GitHub integration configuration.
+    github: GitHubOptions = .{},
+};
+
+/// Options for commit grouping.
+pub const GroupingOptions = struct {
+    /// Enable commit grouping.
+    enabled: bool = false,
+    /// Grouping strategy: "none", "scope", "keyword".
+    strategy: []const u8 = "scope",
+    /// Minimum commits to form a group.
+    min_group_size: usize = 2,
+};
+
+/// Options for highlight generation.
+pub const HighlightOptions = struct {
+    /// Enable highlights section.
+    enabled: bool = false,
+    /// Include breaking changes.
+    include_breaking: bool = true,
+    /// Include security fixes.
+    include_security: bool = true,
+    /// Include deprecations.
+    include_deprecations: bool = true,
+    /// Include performance improvements.
+    include_performance: bool = false,
+    /// Scopes to highlight.
+    highlighted_scopes: []const []const u8 = &.{},
+};
+
+/// Options for monorepo support.
+pub const MonorepoOptions = struct {
+    /// Enable monorepo mode.
+    enabled: bool = false,
+    /// Package prefix patterns (e.g., "packages/").
+    package_prefixes: []const []const u8 = &.{},
+    /// Generate per-package changelogs.
+    per_package_changelogs: bool = false,
+};
+
+/// Options for GitHub integration.
+pub const GitHubOptions = struct {
+    /// Fetch PR descriptions for commits.
+    fetch_pr_descriptions: bool = false,
+    /// Repository in "owner/repo" format (auto-detected from git remote if not set).
+    repo: ?[]const u8 = null,
 };
 
 /// Minimal TOML parser for Chronicle configuration.
@@ -410,6 +514,14 @@ pub const TomlParser = struct {
             try applyRepositoryConfig(config, key, value);
         } else if (std.mem.eql(u8, sect, "sections")) {
             try applySectionConfig(config, key, value);
+        } else if (std.mem.eql(u8, sect, "advanced.grouping")) {
+            applyAdvancedGroupingConfig(config, key, value);
+        } else if (std.mem.eql(u8, sect, "advanced.highlights")) {
+            applyAdvancedHighlightsConfig(config, key, value);
+        } else if (std.mem.eql(u8, sect, "advanced.monorepo")) {
+            applyAdvancedMonorepoConfig(config, key, value);
+        } else if (std.mem.eql(u8, sect, "advanced.github")) {
+            applyAdvancedGitHubConfig(config, key, value);
         }
     }
 
@@ -490,6 +602,50 @@ pub const TomlParser = struct {
             config.section_names.build = value.string;
         } else if (std.mem.eql(u8, key, "other")) {
             config.section_names.other = value.string;
+        }
+    }
+
+    fn applyAdvancedGroupingConfig(config: *Config, key: []const u8, value: Value) void {
+        if (std.mem.eql(u8, key, "enabled")) {
+            config.advanced.grouping.enabled = value.boolean;
+        } else if (std.mem.eql(u8, key, "strategy")) {
+            config.advanced.grouping.strategy = value.string;
+        } else if (std.mem.eql(u8, key, "min_group_size")) {
+            config.advanced.grouping.min_group_size = @intCast(value.integer);
+        }
+    }
+
+    fn applyAdvancedHighlightsConfig(config: *Config, key: []const u8, value: Value) void {
+        if (std.mem.eql(u8, key, "enabled")) {
+            config.advanced.highlights.enabled = value.boolean;
+        } else if (std.mem.eql(u8, key, "include_breaking")) {
+            config.advanced.highlights.include_breaking = value.boolean;
+        } else if (std.mem.eql(u8, key, "include_security")) {
+            config.advanced.highlights.include_security = value.boolean;
+        } else if (std.mem.eql(u8, key, "include_deprecations")) {
+            config.advanced.highlights.include_deprecations = value.boolean;
+        } else if (std.mem.eql(u8, key, "include_performance")) {
+            config.advanced.highlights.include_performance = value.boolean;
+        } else if (std.mem.eql(u8, key, "highlighted_scopes")) {
+            config.advanced.highlights.highlighted_scopes = value.string_array;
+        }
+    }
+
+    fn applyAdvancedMonorepoConfig(config: *Config, key: []const u8, value: Value) void {
+        if (std.mem.eql(u8, key, "enabled")) {
+            config.advanced.monorepo.enabled = value.boolean;
+        } else if (std.mem.eql(u8, key, "package_prefixes")) {
+            config.advanced.monorepo.package_prefixes = value.string_array;
+        } else if (std.mem.eql(u8, key, "per_package_changelogs")) {
+            config.advanced.monorepo.per_package_changelogs = value.boolean;
+        }
+    }
+
+    fn applyAdvancedGitHubConfig(config: *Config, key: []const u8, value: Value) void {
+        if (std.mem.eql(u8, key, "fetch_pr_descriptions")) {
+            config.advanced.github.fetch_pr_descriptions = value.boolean;
+        } else if (std.mem.eql(u8, key, "repo")) {
+            config.advanced.github.repo = value.string;
         }
     }
 

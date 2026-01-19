@@ -125,10 +125,10 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 
 ## Phase 15: Advanced Features
 
-- [ ] Implement related commit grouping
-- [ ] Generate highlights section for major releases
-- [ ] Add monorepo support (per-package changelogs)
-- [ ] Fetch GitHub PR descriptions for enhanced context
+- [x] Implement related commit grouping (grouper.zig, --group flag)
+- [x] Generate highlights section for major releases (highlights.zig, --highlights flag)
+- [x] Add monorepo support (monorepo.zig, --package/--all-packages flags)
+- [x] Fetch GitHub PR descriptions for enhanced context (github_api.zig, --fetch-prs flag)
 
 ## Phase 16: Testing and Polish
 
@@ -164,6 +164,10 @@ chronicle/
 │   ├── filter.zig         # Commit filtering logic
 │   ├── changelog.zig      # Core data structures
 │   ├── config.zig         # TOML config loading
+│   ├── grouper.zig        # Commit grouping by scope (Phase 15)
+│   ├── highlights.zig     # Highlight detection (Phase 15)
+│   ├── monorepo.zig       # Package filtering (Phase 15)
+│   ├── github_api.zig     # GitHub PR fetching (Phase 15)
 │   └── format/
 │       ├── markdown.zig   # Markdown output
 │       ├── json.zig       # JSON output

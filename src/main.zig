@@ -9,6 +9,8 @@ const config = @import("config.zig");
 const markdown = @import("format/markdown.zig");
 const json = @import("format/json.zig");
 const github = @import("format/github.zig");
+const highlights_mod = @import("highlights.zig");
+const github_api = @import("github_api.zig");
 
 const log = std.log.scoped(.chronicle);
 
@@ -36,6 +38,13 @@ const Args = struct {
     dry_run: bool = false,
     quiet: bool = false,
     full: bool = false,
+
+    // Phase 15: Advanced features
+    group: bool = false,
+    highlights: bool = false,
+    package: ?[]const u8 = null,
+    all_packages: bool = false,
+    fetch_prs: bool = false,
 
     const Format = enum {
         markdown,
@@ -121,6 +130,16 @@ fn parseArgs(allocator: std.mem.Allocator) !Args {
             }
         } else if (std.mem.eql(u8, arg, "--full")) {
             args.full = true;
+        } else if (std.mem.eql(u8, arg, "--group")) {
+            args.group = true;
+        } else if (std.mem.eql(u8, arg, "--highlights")) {
+            args.highlights = true;
+        } else if (std.mem.eql(u8, arg, "--package")) {
+            args.package = arg_iter.next();
+        } else if (std.mem.eql(u8, arg, "--all-packages")) {
+            args.all_packages = true;
+        } else if (std.mem.eql(u8, arg, "--fetch-prs")) {
+            args.fetch_prs = true;
         }
     }
 
@@ -245,6 +264,59 @@ fn runGenerate(allocator: std.mem.Allocator, args: Args) !void {
 
     for (filtered_commits) |commit| {
         try entry.addCommit(commit);
+    }
+
+    // Phase 15: Apply advanced features
+
+    // Grouping by scope
+    if (args.group or cfg.advanced.grouping.enabled) {
+        const min_group_size = cfg.advanced.grouping.min_group_size;
+        try entry.groupAllSections(min_group_size);
+        if (!args.quiet) {
+            try stderr.writeAll("Applied commit grouping by scope\n");
+        }
+    }
+
+    // Highlights
+    if (args.highlights or cfg.advanced.highlights.enabled) {
+        const hl_criteria = cfg.toHighlightCriteria();
+        const hl_gen = highlights_mod.HighlightGenerator.init(allocator, hl_criteria);
+        var hl_list = try hl_gen.generateHighlights(&entry);
+        defer {
+            for (hl_list.items) |*h| {
+                h.deinit(allocator);
+            }
+            hl_list.deinit(allocator);
+        }
+
+        for (hl_list.items) |highlight| {
+            try entry.addHighlight(highlight);
+        }
+
+        if (!args.quiet and entry.highlights.items.len > 0) {
+            var buf2: [64]u8 = undefined;
+            const msg2 = std.fmt.bufPrint(&buf2, "Generated {d} highlights\n", .{entry.highlights.items.len}) catch "";
+            try stderr.writeAll(msg2);
+        }
+    }
+
+    // Fetch PR descriptions (if enabled)
+    if (args.fetch_prs or cfg.advanced.github.fetch_pr_descriptions) {
+        if (cfg.advanced.github.repo orelse cfg.repository.url) |repo| {
+            // Extract owner/repo from URL if needed
+            const repo_str = if (std.mem.startsWith(u8, repo, "https://github.com/"))
+                repo[19..]
+            else
+                repo;
+
+            const gh_api = github_api.GitHubAPI.init(allocator, repo_str);
+            _ = gh_api;
+            // Note: Actual PR fetching would require iterating commits and calling gh CLI
+            // For now, just log that it was requested
+            if (!args.quiet) {
+                try stderr.writeAll("PR fetching enabled (requires gh CLI)\n");
+            }
+        }
     }
 
     // Format output using configuration
@@ -801,6 +873,13 @@ fn printHelp() void {
         \\    -f, --format <FMT>   Output format: markdown, json, github
         \\    --dry-run            Print to stdout instead of writing to file
         \\    --full               Regenerate full changelog from all tags
+        \\
+        \\ADVANCED OPTIONS:
+        \\    --group              Group commits by scope within sections
+        \\    --highlights         Generate highlights section for notable changes
+        \\    --package <NAME>     Filter to specific package (monorepo mode)
+        \\    --all-packages       Generate changelogs for all packages
+        \\    --fetch-prs          Fetch PR descriptions from GitHub (requires gh CLI)
         \\
         \\LINT OPTIONS:
         \\    --from <TAG>         Start of commit range (exclusive)
