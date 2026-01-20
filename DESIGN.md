@@ -8,7 +8,7 @@ A changelog generator with a Zig CLI core and Claude Code skill wrapper.
 
 **Architecture:** Zig CLI + Claude Code Skill
 **CLI Language:** Zig
-**Skill Location:** `~/.claude/skills/changelog.md`
+**Skill Location:** `~/.claude/skills/changelog/SKILL.md`
 
 ### The Problem
 
@@ -480,18 +480,19 @@ Done. CHANGELOG.md updated with v1.2.0 release notes.
 
 ### Skill File
 
-`~/.claude/skills/changelog.md`:
+`~/.claude/skills/changelog/SKILL.md`:
 
 ```markdown
-# /changelog - Generate Release Notes
+---
+name: changelog
+description: Generate changelog entries from git commits. Use when asked to generate changelog, update changelog, write changelog, create release notes, or document changes for a release.
+allowed-tools: Read, Glob, Grep, Bash, Edit, Write
+user-invocable: true
+---
 
-Generate changelog entries using Chronicle CLI with AI enhancement.
+# Changelog Generation Skill
 
-## Usage
-
-```
-/changelog [version] [options]
-```
+Generate changelog entries from git commits using conventional commit format.
 
 ## Arguments
 
@@ -500,7 +501,7 @@ Generate changelog entries using Chronicle CLI with AI enhancement.
 - `--raw` — Output CLI results without AI enhancement
 - `--enhance` — Enhance with AI (default)
 
-## Instructions
+## Workflow
 
 ### 1. Check for Chronicle CLI
 

@@ -292,7 +292,26 @@ Chronicle includes a Claude Code skill for AI-assisted changelog generation. The
 - Suggest groupings for large releases
 - Fall back to raw git when CLI is unavailable
 
-See `~/.claude/skills/changelog.md` for the skill definition.
+### Install the Skill
+
+Copy the skill to your Claude Code skills directory:
+
+```bash
+mkdir -p ~/.claude/skills/changelog
+cp skill/SKILL.md ~/.claude/skills/changelog/
+```
+
+### Usage
+
+Once installed, invoke the skill in Claude Code:
+
+```
+/changelog                # Generate changelog for latest release
+/changelog v1.2.0         # Generate for specific version
+/changelog --full         # Regenerate entire changelog
+```
+
+See `skill/SKILL.md` for the full skill definition.
 
 ## Development
 
