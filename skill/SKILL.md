@@ -345,9 +345,9 @@ For each commit, apply this regex to the subject line:
 
 **Capture groups:**
 1. Type: feat, fix, docs, etc.
-2. Scope: optional `(scope)` portion
-3. Breaking indicator: optional `!`
-4. Description: the message after `: `
+2. Scope: optional (scope) portion
+3. Breaking indicator: optional !
+4. Description: the message after the colon
 
 **Categorize by type:**
 | Type | Section |
@@ -372,8 +372,8 @@ For each commit, apply this regex to the subject line:
 ### Step F5: Detect Breaking Changes
 
 A commit is breaking if:
-1. Has `!` before the colon: `feat!: new API`
-2. Body contains `BREAKING CHANGE:` footer
+1. Has ! before the colon (e.g., feat!: new API)
+2. Body contains BREAKING CHANGE: footer
 
 ```bash
 # Check commit body for BREAKING CHANGE footer
@@ -815,9 +815,9 @@ Rank commits by significance:
 
 | Signal | Weight |
 |--------|--------|
-| Breaking change (`!`) | +5 |
-| New feature (`feat:`) | +3 |
-| Bug fix (`fix:`) | +2 |
+| Breaking change (!) | +5 |
+| New feature (feat:) | +3 |
+| Bug fix (fix:) | +2 |
 | Mentioned in issues | +2 |
 | Large diff (100+ lines) | +1 |
 | Multiple reviewers (from metadata) | +1 |
